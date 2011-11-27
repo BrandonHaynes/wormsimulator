@@ -1,3 +1,6 @@
+from InfectionStatus import InfectionStatus 
+
+
 class KeyValuePairNodeSerializer:
     """
     Serializer for Node instances.
@@ -10,7 +13,8 @@ class KeyValuePairNodeSerializer:
         return node.address, (node.status, node.hit_list)
 
     @staticmethod
-    def deserialize((address, (status, hit_list))):
+    def deserialize((address, metadata)):
+        status, hit_list = metadata if not metadata is None else (InfectionStatus.UNKNOWN, [])
         """ Converts a key-value pair into a node instance """
         return Node(address, status, hit_list)
 
@@ -21,6 +25,12 @@ class TabSeparatedNodeSerializer(KeyValuePairNodeSerializer):
     string is a tab-separated key-value pair.
     Keys are node addresses, values are node metadata.
     """
+    @staticmethod
+    def deserialize(text):
+        address, metadata = map(eval, text.split('\t'))
+        status, hit_list = metadata if not metadata is None else (InfectionStatus.UNKNOWN, [])
+        return Node(address, status, hit_list)
+
     @staticmethod
     def serialize(node):
         return "%s\t%s,%s" % (node.address, node.status, node.hit_list)
@@ -37,6 +47,6 @@ class Node:
     serializer = KeyValuePairNodeSerializer
 
     def __init__(self, address, status, hit_list=[]):
-        self.address = address
+        self.address = int(address) if not address is None else None
         self.status = status
         self.hit_list = hit_list
