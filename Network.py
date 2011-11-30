@@ -80,3 +80,7 @@ class IPv6(IPv4):
     """
     address_space = 2**128
 
+    expected_hosts = 3000000
+    expected_vulnerable = expected_hosts / 4
+    probability_vulnerable = float(expected_vulnerable) / address_space
+
