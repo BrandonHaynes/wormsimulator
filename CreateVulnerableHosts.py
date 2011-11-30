@@ -91,7 +91,8 @@ class CreateVulnerableHosts():
 
 if __name__ == '__main__':
     """ Use a tab-separated serializer since we're not in a map/reduce job """
-    #Node.serializer = TabSeparatedNodeSerializer
-    # Argv[1] specifies the number of threads over which to operate
+    Node.serializer = TabSeparatedNodeSerializer
+    # Argv[1] specifies the network to use in generation (256-node, IPv4, etc)
+    # Argv[2] specifies the number of threads over which to operate
     CreateVulnerableHosts(getattr(Network, argv[1])).execute(int(argv[2]) if len(argv) > 2 else 1)
 
