@@ -11,15 +11,22 @@ import Network
 
 class Propagate(MRJob):
     def __init__(self, **kwargs):
+        self.network = kwargs.pop('network')
+        self.iterations = kwargs.pop('iterations', 1)
+        self.emit_volatile = kwargs.pop('emit_volatile', False)
+	kwargs['args'] = ['--input-protocol', 'repr', '--python-archive', Package.create()] + kwargs.get('args', [])
+
         super(Propagate, self).__init__(**kwargs)
         # This needs to go when Schimmy is applied
         self.total_reducers = self.options.jobconf.get('mapred.map.tasks', 1)
 
-    @staticmethod
-    def is_emitted(status):
+    def is_volatile(self, status):
+        return (self.emit_volatile and status == InfectionStatus.INFECTING)
+
+    def is_stable(self, status):
         """ 
-        Identifies if a node should be emitted by the reducer 
-        Some states (such as INFECTING) don't need to be carried forward.
+        Identifies if a node should be emitted by the mapper
+        Some states (such as INFECTING) MAY NOT need to be carried forward.
         """
         return (status == InfectionStatus.VULNERABLE or
                  status == InfectionStatus.INFECTED or
@@ -40,12 +47,12 @@ class Propagate(MRJob):
         #   Then, emit the infected node (this should be removed with Schimmy)
         # Otherwise, do nothing and emit.
         node = Node.serializer.deserialize((key, value))
-        if(node.status == InfectionStatus.INFECTED):
-            target = Node(node.hit_list.pop(), InfectionStatus.INFECTING) if any(node.hit_list)  \
-                     else self.network.random_node(InfectionStatus.INFECTING)
+        if node.status == InfectionStatus.INFECTED:
+            target = Node(node.hit_list.pop(), InfectionStatus.INFECTING, [node.address]) if any(node.hit_list)  \
+                     else self.network.random_node(node.address, InfectionStatus.INFECTING)
             yield Node.serializer.serialize(node)
             yield Node.serializer.serialize(target)
-        else:
+        elif self.is_stable(node.status):
             yield key, value
 
     def reducer(self, key, values):
@@ -58,20 +65,17 @@ class Propagate(MRJob):
         result_status = reduce(InfectionStatus.compare, candidate_statuses, None)
 
         # Only emit if it's an interesting status, otherwise ignore
-        if(Propagate.is_emitted(result_status)):
+        if(self.is_stable(result_status)):
             # Package the node into its current status and other metadata
             result_node = candidate_nodes[0]
             result_node.status = result_status
             yield Node.serializer.serialize(result_node)
 
-    @classmethod
-    def forward(cls, network=Network256, iterations=1, arguments=[]):
-        """ Propogate an input network in time for a given number of iterations. """
-        cls.iterations = iterations
-        cls.network = network
-        job = cls(args=['--input-protocol', 'repr', '--python-archive', Package.create()] + arguments)
-        job.execute()
+        if self.emit_volatile:
+            for volatile_node in filter(lambda n: self.is_volatile(n.status), candidate_nodes):
+                yield Node.serializer.serialize(volatile_node)
 
 if __name__ == '__main__':
-    Propagate.forward(network=Network256, iterations=1, arguments=argv[1:])
+    """ Propogate an input network in time for a given number of iterations. """
+    Propagate(network=Network256, iterations=8, args=argv[1:], emit_volatile=False).execute()
 
