@@ -3,26 +3,38 @@ from itertools import repeat
 from itertools import izip
 from itertools import imap
 from mrjob.job import MRJob
-from InfectionStatus import InfectionStatus 
-from Node import Node
-from Package import Package
-from Network import IPv4, IPv6, Network256, NetworkGraphable
-import Network
+from Network.InfectionStatus import InfectionStatus 
+from Network.Node import Node
+import Network.Network
+from Utilities.Package import Package
 
 class Propagate(MRJob):
     def __init__(self, **kwargs):
-        self.network = kwargs.pop('network')
-        self.iterations = kwargs.pop('iterations', 1)
-        self.propagation_delay = kwargs.pop('propagation_delay', 0)
-        self.emit_volatile = kwargs.pop('emit_volatile', False)
         kwargs['args'] = ['--input-protocol', 'repr', '--python-archive', Package.create()] + kwargs.get('args', [])
 
         super(Propagate, self).__init__(**kwargs)
+
+        self.network = getattr(Network.Network, self.options.network)
         # This needs to go when Schimmy is applied
         self.total_reducers = self.options.jobconf.get('mapred.map.tasks', 1)
 
+    def configure_options(self):
+        super(Propagate, self).configure_options()
+        self.add_passthrough_option(
+            '--network', type='string', 
+            help='Indicate the class name of the network associated with this propagation.')
+        self.add_passthrough_option(
+            '--iterations', type='int', default=1, 
+            help='Indicate the number of iterations to execute.')
+        self.add_passthrough_option(
+            '--propagation-delay', type='int', default=0, 
+            help='Indicate the propagation delay for new infections.')
+        self.add_passthrough_option(
+            '--emit-volatile', type='int', default=0, 
+            help='Indicate whether to emit infecting edges from the last iteration.')
+
     def is_volatile(self, status):
-        return (self.emit_volatile and status == InfectionStatus.INFECTING)
+        return (self.options.emit_volatile and status == InfectionStatus.INFECTING)
 
     def is_stable(self, status):
         """ 
@@ -33,9 +45,15 @@ class Propagate(MRJob):
                  status == InfectionStatus.INFECTED or
                  status == InfectionStatus.IMMUNE)
 
+    @staticmethod
+    def is_new_infection(result_status, input_statuses):
+        return result_status == InfectionStatus.INFECTED and \
+                all(map(lambda status: status != InfectionStatus.INFECTED, input_statuses)) and \
+                any(map(lambda status: status == InfectionStatus.INFECTING, input_statuses))
+
     def steps(self):
         return map(lambda _: MRJob.mr(self.mapper, self.reducer), 
-                    xrange(0, self.iterations))
+                    xrange(0, self.options.iterations))
 
     def partition(key):
         # This needs to go when Schimmy is applied
@@ -50,14 +68,25 @@ class Propagate(MRJob):
         node = Node.serializer.deserialize((key, value))
         if node.status == InfectionStatus.INFECTED:
             if node.propagation_delay == 0:
-                target = Node(node.hit_list.pop(), InfectionStatus.INFECTING, [node.address], self.propagation_delay) if any(node.hit_list)  \
-                         else self.network.random_node(node.address, InfectionStatus.INFECTING, self.propagation_delay)
+                target = Node(node.hit_list.pop(), InfectionStatus.INFECTING, [], self.options.propagation_delay, node.address) if any(node.hit_list)  \
+                         else self.network.random_node(node.address, InfectionStatus.INFECTING, self.options.propagation_delay)
+		target.hit_list = node.hit_list[:len(node.hit_list)/2]
                 yield Node.serializer.serialize(target)
             else:
                 node.propagation_delay -= 1
             yield Node.serializer.serialize(node)
-        elif self.is_stable(node.status):
+        elif self.is_stable(node.status) or node.status == InfectionStatus.SUCCESSFUL:
             yield key, value
+
+    @staticmethod
+    def resolve_hit_list(statuses, nodes):
+        #if(Propagate.is_new_infection(result_status, candidate_statuses)):
+        #    return reduce(lambda a,n: a + n.hit_list, nodes, [])
+        if(any(map(lambda status: status == InfectionStatus.SUCCESSFUL, statuses))):
+            full_list = reduce(lambda a,n: a + n.hit_list, nodes, [])
+            return full_list[:len(full_list) / 2]
+        else:
+            return reduce(lambda a,n: a + n.hit_list, nodes, [])       
 
     def reducer(self, key, values):
         # Each address (key) will have a set of infection statuses associated therewith.
@@ -65,7 +94,7 @@ class Propagate(MRJob):
         # Since we have a total order on these status values, reduce order does not matter.
         # Emit the final status value (and other node metadata)
         candidate_nodes = map(Node.serializer.deserialize, izip(repeat(key), values))
-        candidate_statuses = imap(lambda n: n.status, candidate_nodes)
+        candidate_statuses = map(lambda n: n.status, candidate_nodes)
         result_status = reduce(InfectionStatus.compare, candidate_statuses, None)
 
         # Only emit if it's an interesting status, otherwise ignore
@@ -74,9 +103,14 @@ class Propagate(MRJob):
             result_node = candidate_nodes[0]
             result_node.status = result_status
             result_node.propagation_delay = max(map(lambda n: n.propagation_delay, candidate_nodes))
+            result_node.hit_list = Propagate.resolve_hit_list(candidate_statuses, candidate_nodes)
+            result_node.source = max(map(lambda n: n.source, candidate_nodes))
             yield Node.serializer.serialize(result_node)
 
-        if self.emit_volatile:
+            if(Propagate.is_new_infection(result_status, candidate_statuses)):
+                yield Node.serializer.serialize(Node(result_node.source, InfectionStatus.SUCCESSFUL, source=result_node.address))
+            
+        if self.options.emit_volatile:
             for volatile_node in filter(lambda n: self.is_volatile(n.status), candidate_nodes):
                 yield Node.serializer.serialize(volatile_node)
 
@@ -84,5 +118,8 @@ if __name__ == '__main__':
     """ Propogate an input network in time for a given number of iterations. """
     """ Volatile nodes represent attempted infections between nodes, and may be optimally emitted """
     """ Propagation delay is the delay (in iterations) that an infecting and infected node must wait before resuming scanning """
-    Propagate(network=Network256, iterations=8, emit_volatile=True, propagation_delay=100, args=argv[1:]).execute()
+    if not any(map(lambda a: a == '--network', argv)):
+        print '--network switch required.  Use --help to display all options.'
+    else:
+        Propagate(args=argv[1:]).execute()
 

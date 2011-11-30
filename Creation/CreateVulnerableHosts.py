@@ -2,11 +2,10 @@ from sys import argv
 import random
 from itertools import imap, chain
 from functools import partial
-import Network
-from Network import IPv4, IPv6, Network256, NetworkGraphable
-from Node import Node
-from Node import TabSeparatedNodeSerializer
-from InfectionStatus import InfectionStatus
+import Network.Network
+from Network.Node import Node
+from Network.Node import TabSeparatedNodeSerializer
+from Network.InfectionStatus import InfectionStatus
 
 
 class CreateVulnerableHosts():
@@ -17,7 +16,7 @@ class CreateVulnerableHosts():
     marked as being initially infected.  
     """
     @staticmethod
-    def execute(network=IPv4, nodes_to_infect=1):
+    def execute(network, nodes_to_infect=1):
         """ 
         Generate infected and vulnerable nodes for the given network.
         nodes_to_infect indicates the number of initially-infected nodes.
@@ -30,10 +29,10 @@ class CreateVulnerableHosts():
         # Create iterations of infected and vulnerable addresses
         # These may overlap, we'll have to deal with that during propagation
         infected_addresses = imap(
-            lambda _: random.randint(0, network.address_space), 
+            lambda _: random.randint(0, network.address_space - 1), 
             CreateVulnerableHosts.__longrange(nodes_to_infect))
         vulnerable_addresses = imap(
-            lambda _: random.randint(0, network.address_space), 
+            lambda _: random.randint(0, network.address_space - 1), 
             CreateVulnerableHosts.__longrange(long(
                 network.address_space * network.probability_vulnerable) - 
                     nodes_to_infect))

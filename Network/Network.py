@@ -17,7 +17,9 @@ class Network:
     @classmethod
     def random_node(cls, source_address=None, with_status=InfectionStatus.UNKNOWN, propagation_delay=0):
         """ Select a random node across the full address space """
-        return Node(random.randrange(0, cls.address_space), with_status, [source_address] if not source_address is None else [], propagation_delay)
+        return Node(random.randrange(0, cls.address_space), with_status, 
+                     [source_address] if not source_address is None else [], 
+                     propagation_delay, source_address)
 
     @classmethod
     def create_host(cls, address, status=InfectionStatus.UNKNOWN):

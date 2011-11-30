@@ -14,6 +14,7 @@ class InfectionStatus:
 
     IMMUNE --- any ---> IMMUNE
     UKNOWN --- any ---> UKNOWN
+    SUCCESSFUL --- any ---> any
     INFECTED --- { INFECTING } ---> INFECTED
     VULNERABLE --- { INFECTING, INFECTED } ---> INFECTED   
     VULNERABLE --- { VULNERABLE } ---> VULNERABLE
@@ -28,6 +29,7 @@ class InfectionStatus:
     VULNERABLE = 1
     INFECTING = 2
     INFECTED = 3
+    SUCCESSFUL = 4
 
     @staticmethod
     def compare(left, right):
@@ -38,9 +40,9 @@ class InfectionStatus:
         To more readily allow comparision composition during a reduce,
         we coalesce on None such that compare(x,None)=x and compare(None,x)=x.
         """
-        if left is None:
+        if left is None or left == InfectionStatus.SUCCESSFUL:
             return right
-        elif right is None:
+        elif right is None or right == InfectionStatus.SUCCESSFUL:
             return left
         elif left == InfectionStatus.IMMUNE or right == InfectionStatus.IMMUNE:
             return InfectionStatus.IMMUNE

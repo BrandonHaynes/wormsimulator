@@ -10,13 +10,13 @@ class KeyValuePairNodeSerializer:
     @staticmethod
     def serialize(node):
         """ Converts a node into a key-value pair """
-        return node.address, (node.status, node.hit_list, node.propagation_delay)
+        return node.address, (node.status, node.hit_list, node.propagation_delay, node.source)
 
     @staticmethod
     def deserialize((address, metadata)):
-        status, hit_list, propagation_delay = metadata if not metadata is None else (InfectionStatus.UNKNOWN, [], 0)
+        status, hit_list, propagation_delay, source = metadata if not metadata is None else (InfectionStatus.UNKNOWN, [], 0, 0)
         """ Converts a key-value pair into a node instance """
-        return Node(address, status, hit_list, propagation_delay)
+        return Node(address, status, hit_list, propagation_delay, source)
 
 class TabSeparatedNodeSerializer(KeyValuePairNodeSerializer):
     """
@@ -28,12 +28,12 @@ class TabSeparatedNodeSerializer(KeyValuePairNodeSerializer):
     @staticmethod
     def deserialize(text):
         address, metadata = map(eval, text.split('\t'))
-        status, hit_list, propagation_delay = metadata if not metadata is None else (InfectionStatus.UNKNOWN, [], 0)
-        return Node(address, status, hit_list, propagation_delay)
+        status, hit_list, propagation_delay, source = metadata if not metadata is None else (InfectionStatus.UNKNOWN, [], 0, 0)
+        return Node(address, status, hit_list, propagation_delay, source)
 
     @staticmethod
     def serialize(node):
-        return "%s\t%s,%s,%s" % (node.address, node.status, node.hit_list, node.propagation_delay)
+        return "%s\t%s,%s,%s,%s" % (node.address, node.status, node.hit_list, node.propagation_delay, node.source)
 
 class Node:
     """
@@ -46,8 +46,9 @@ class Node:
     # Maintain a class-bound serializer for nodes
     serializer = KeyValuePairNodeSerializer
 
-    def __init__(self, address, status, hit_list=[], propagation_delay=0):
+    def __init__(self, address, status, hit_list=[], propagation_delay=0, source=0):
         self.address = int(address) if not address is None else None
         self.status = status
         self.hit_list = hit_list
         self.propagation_delay = propagation_delay
+        self.source = source
