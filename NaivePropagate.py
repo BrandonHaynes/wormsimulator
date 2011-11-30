@@ -88,6 +88,12 @@ class Propagate(MRJob):
         else:
             return reduce(lambda a,n: a + n.hit_list, nodes, [])       
 
+    def resolve_delay(self, statuses, nodes):
+        if(any(map(lambda status: status == InfectionStatus.SUCCESSFUL, statuses))):
+            return max(map(lambda n: n.propagation_delay, nodes) + [self.options.propagation_delay])
+        else:
+            return max(map(lambda n: n.propagation_delay, nodes))      
+
     def reducer(self, key, values):
         # Each address (key) will have a set of infection statuses associated therewith.
         # For each such status, call InfectionStatus.compare and aggregate the response.
@@ -102,7 +108,7 @@ class Propagate(MRJob):
             # Package the node into its current status and other metadata
             result_node = candidate_nodes[0]
             result_node.status = result_status
-            result_node.propagation_delay = max(map(lambda n: n.propagation_delay, candidate_nodes))
+            result_node.propagation_delay = self.resolve_delay(candidate_statuses, candidate_nodes)
             result_node.hit_list = Propagate.resolve_hit_list(candidate_statuses, candidate_nodes)
             result_node.source = max(map(lambda n: n.source, candidate_nodes))
             yield Node.serializer.serialize(result_node)
