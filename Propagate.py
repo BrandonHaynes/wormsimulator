@@ -13,8 +13,9 @@ class Propagate(MRJob):
     def __init__(self, **kwargs):
         self.network = kwargs.pop('network')
         self.iterations = kwargs.pop('iterations', 1)
+        self.propagation_delay = kwargs.pop('propagation_delay', 0)
         self.emit_volatile = kwargs.pop('emit_volatile', False)
-	kwargs['args'] = ['--input-protocol', 'repr', '--python-archive', Package.create()] + kwargs.get('args', [])
+        kwargs['args'] = ['--input-protocol', 'repr', '--python-archive', Package.create()] + kwargs.get('args', [])
 
         super(Propagate, self).__init__(**kwargs)
         # This needs to go when Schimmy is applied
@@ -48,10 +49,13 @@ class Propagate(MRJob):
         # Otherwise, do nothing and emit.
         node = Node.serializer.deserialize((key, value))
         if node.status == InfectionStatus.INFECTED:
-            target = Node(node.hit_list.pop(), InfectionStatus.INFECTING, [node.address]) if any(node.hit_list)  \
-                     else self.network.random_node(node.address, InfectionStatus.INFECTING)
+            if node.propagation_delay == 0:
+                target = Node(node.hit_list.pop(), InfectionStatus.INFECTING, [node.address], self.propagation_delay) if any(node.hit_list)  \
+                         else self.network.random_node(node.address, InfectionStatus.INFECTING, self.propagation_delay)
+                yield Node.serializer.serialize(target)
+            else:
+                node.propagation_delay -= 1
             yield Node.serializer.serialize(node)
-            yield Node.serializer.serialize(target)
         elif self.is_stable(node.status):
             yield key, value
 
@@ -69,6 +73,7 @@ class Propagate(MRJob):
             # Package the node into its current status and other metadata
             result_node = candidate_nodes[0]
             result_node.status = result_status
+            result_node.propagation_delay = max(map(lambda n: n.propagation_delay, candidate_nodes))
             yield Node.serializer.serialize(result_node)
 
         if self.emit_volatile:
@@ -77,5 +82,7 @@ class Propagate(MRJob):
 
 if __name__ == '__main__':
     """ Propogate an input network in time for a given number of iterations. """
-    Propagate(network=Network256, iterations=8, args=argv[1:], emit_volatile=False).execute()
+    """ Volatile nodes represent attempted infections between nodes, and may be optimally emitted """
+    """ Propagation delay is the delay (in iterations) that an infecting and infected node must wait before resuming scanning """
+    Propagate(network=Network256, iterations=8, emit_volatile=True, propagation_delay=100, args=argv[1:]).execute()
 
