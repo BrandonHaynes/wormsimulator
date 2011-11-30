@@ -69,9 +69,9 @@ class Propagate(MRJob):
         """ Propogate an input network in time for a given number of iterations. """
         cls.iterations = iterations
         cls.network = network
-        job = cls(args=['-r', 'emr', '--input-protocol', 'repr', '--python-archive', Package.create()] + arguments)
+        job = cls(args=['--input-protocol', 'repr', '--python-archive', Package.create()] + arguments)
         job.execute()
 
 if __name__ == '__main__':
-    Propagate.forward(network=NetworkGraphable, iterations=1, arguments=argv[1:])
+    Propagate.forward(network=Network256, iterations=1, arguments=argv[1:])
 
