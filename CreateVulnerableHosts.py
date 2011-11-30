@@ -3,6 +3,7 @@ from sys import argv
 from itertools import imap
 from itertools import islice
 from functools import partial
+import Network
 from Network import IPv4, IPv6, Network256, NetworkGraphable
 from Node import Node
 from Node import TabSeparatedNodeSerializer
@@ -90,7 +91,7 @@ class CreateVulnerableHosts():
 
 if __name__ == '__main__':
     """ Use a tab-separated serializer since we're not in a map/reduce job """
-    Node.serializer = TabSeparatedNodeSerializer
+    #Node.serializer = TabSeparatedNodeSerializer
     # Argv[1] specifies the number of threads over which to operate
-    CreateVulnerableHosts(NetworkGraphable).execute(int(argv[1]) if len(argv) > 1 else 1)
+    CreateVulnerableHosts(getattr(Network, argv[1])).execute(int(argv[2]) if len(argv) > 2 else 1)
 

@@ -5,7 +5,9 @@ from itertools import imap
 from mrjob.job import MRJob
 from InfectionStatus import InfectionStatus 
 from Node import Node
+from Package import Package
 from Network import IPv4, IPv6, Network256, NetworkGraphable
+import Network
 
 class Propagate(MRJob):
     def __init__(self, **kwargs):
@@ -63,12 +65,13 @@ class Propagate(MRJob):
             yield Node.serializer.serialize(result_node)
 
     @classmethod
-    def forward(cls, network=Network256, iterations=1):
+    def forward(cls, network=Network256, iterations=1, arguments=[]):
         """ Propogate an input network in time for a given number of iterations. """
         cls.iterations = iterations
         cls.network = network
-        cls.run()
+        job = cls(args=['-r', 'emr', '--input-protocol', 'repr', '--python-archive', Package.create()] + arguments)
+        job.execute()
 
 if __name__ == '__main__':
-    Propagate.forward(network=NetworkGraphable, iterations=30)
+    Propagate.forward(network=NetworkGraphable, iterations=1, arguments=argv[1:])
 
