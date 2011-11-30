@@ -1,3 +1,4 @@
+from sys import argv
 from mrjob.job import MRJob
 import random
 from InfectionStatus import InfectionStatus 
@@ -20,6 +21,9 @@ class CreateHitLists(MRJob):
     """
 
     def __init__(self, **kwargs):
+        self.size = kwargs.pop('size', 1)
+        kwargs['args'] = ['--input-protocol', 'repr'] + list(kwargs.get('args', []))
+
         super(CreateHitLists, self).__init__(**kwargs)
         self.infected_nodes = []
         self.vulnerable_nodes = []
@@ -47,12 +51,6 @@ class CreateHitLists(MRJob):
         # Identity reducer.  Expecting one value per key.
         yield key, values.next()
 
-    @classmethod
-    def create(cls, size):
-        """ Creates hit lists for each infected node using a list of given size. """
-        cls.size = size
-        cls.run()
-
 if __name__ == '__main__':
-    CreateHitLists.create(size=300)
+    CreateHitLists(size=1, args=argv[1:]).execute()
 
