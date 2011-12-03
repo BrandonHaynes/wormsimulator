@@ -50,7 +50,10 @@ class CreateHitLists(MRJob):
         # Here we handle infected nodes (which were not emitted during the mapper)
         # For each such node, create a hit list, attach it, and then emit the result.
         for infected_node in self.infected_nodes:
-            infected_node.hit_list = map(lambda n: n.address, random.sample(self.vulnerable_nodes, self.options.size))
+            infected_node.hit_list = \
+                map(lambda n: n.address, 
+                    random.sample(self.vulnerable_nodes, 
+                                  min(self.options.size, len(self.vulnerable_nodes))))
             yield Node.serializer.serialize(infected_node)
 
     def reducer(self, key, values):

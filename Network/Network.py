@@ -59,8 +59,8 @@ class NetworkGraphable(Network):
     Create a network of 2^8 nodes, with a default 10% vulnerable probability.
     Both of these values are absurd, but useful for testing.
     """
-    address_space = 2**16
-    probability_vulnerable = 1.0/6
+    address_space = 2**25
+    probability_vulnerable = 1000000.0 / 2**32
 
 class IPv4(Network):
     """
