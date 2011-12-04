@@ -25,10 +25,15 @@ class PartitionUtilities:
         if partition_directory is None:
             return 'partitions/part-%05d'% current_partition
         else:
-            return PartitionUtilities.get_partition_file(
+            #return PartitionUtilities.get_partition_file(
+            #            partition_directory, 
+            #            current_partition, total_partitions, 
+            #            partitioner, transformer)
+            PartitionUtilities.get_partition_file(
                         partition_directory, 
                         current_partition, total_partitions, 
                         partitioner, transformer)
+            return 'partitions/part-%05d'% current_partition
 
     @staticmethod
     def get_partition_file(directory, current_partition, total_partitions, 

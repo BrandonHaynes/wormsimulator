@@ -3,24 +3,40 @@ import tarfile
 import os
 import tempfile
 from itertools import repeat
-import Network.Network
-from Network.Node import Node, TabSeparatedNodeSerializer
+from Network.Node import TabSeparatedNodeSerializer
 
 class Partitions:
+    """
+    Utility class that accepts a (potentially large) input file and emits
+    n partitions that contain the sorted results based upon a given partition
+    function.
+    """
     @staticmethod 
-    def create(filename, network, partitions, partitioner, fail_silently=False, tar_filename=None):
+    def create(filename, partitions, partitioner, 
+                          fail_silently=False, tar_filename=None):
+        """
+        Create a new partition.
+        filename: input filename
+        partitions: the number of partitions to create
+        partitioner: a function from key to partition number
+        fail_silently: when set, will swallow any exception encountered when 
+                       opening the input file
+        tar_filename: The filename used to create the partition archive
+        """
         make_filename = lambda partition: 'part-%05d' % partition
-        make_path = lambda partition: '%s/%s' % (directory, make_filename(partition))
+        make_path = lambda partition: '%s/%s' % (directory, 
+                                                  make_filename(partition))
         nodes = map(lambda _: [], xrange(partitions))
         stream = None
 
-        #print 'Reading...'
+        # Open the file, swallow if flag set
         try:
             stream = open(filename)
         except IOError:
             if not fail_silently: raise
             else: return None
             
+        # For each line in the file, save it to its proper partition
         try:
             for line in stream:
                 node = TabSeparatedNodeSerializer.deserialize(line)
@@ -29,28 +45,31 @@ class Partitions:
         finally:
             if stream: stream.close()
 
-        #print 'Writing...'
+        # Create a temporary file
         directory = tempfile.mkdtemp()
 
+        # For each partition, write its dataset
         for partition, partition_nodes in enumerate(nodes):
-            #print 'Partition #%d' % partition
             stream = open(make_path(partition), "w")
             try:
                 for node in sorted(partition_nodes, key=lambda n: n.address):
-                    stream.write(TabSeparatedNodeSerializer.serialize(node) + '\n')
+                    stream.write(\
+                        TabSeparatedNodeSerializer.serialize(node) + '\n')
             finally:
                 if stream: stream.close()
         
-        #print 'Compressing...'
-        tar_filename = tar_filename or tempfile.mktemp(prefix='partition', suffix='.tar.gz')
+        # Compress the resulting partitions
+        tar_filename = tar_filename or tempfile.mktemp(prefix='partition', 
+                                                       suffix='.tar.gz')
         tar = tarfile.open(tar_filename, "w:gz")
-        try: map(lambda p: tar.add(make_path(p), make_filename(p)), xrange(partitions))
+        try: map(lambda p: tar.add(make_path(p), make_filename(p)), 
+                  xrange(partitions))
         finally: tar.close()
 
-        #print 'Cleaning up...'
+        # Remove the scratch files
         map(lambda p: os.remove(make_path(p)), xrange(partitions))
 
         return tar_filename
 
 if __name__ == '__main__':
-    CreatePartitions.create(argv[1], getattr(Network, argv[2]), int(argv[3]))
+    CreatePartitions.create(argv[1], int(argv[2]))

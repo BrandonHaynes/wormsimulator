@@ -3,11 +3,13 @@ class InfectionStatus:
     An enumeration representing the infection status of a network node.
 
     UNKNOWN = Unused, indicates an error state
-    IMMUNE = Currently unused, indicates that a node is not vulnerable to infection
+    IMMUNE = Currently unused, indicates that a node is not vulnerable to 
+             infection
     VULNERABLE = Node is vulnerable to infection, but not currently infected
-    INFECTING = Node is in the process of being infected (this may not be successful)
-                This is generally a transition state between vulnerable and infected,
-                or immune and immune.
+    INFECTING = Node is in the process of being infected (this may not be 
+                    successful)
+                This is generally a transition state between vulnerable and 
+                infected, or immune and immune.
     INFECTED = Node is infected and will transmit infecting messages.
 
     State diagram:
@@ -20,7 +22,8 @@ class InfectionStatus:
     VULNERABLE --- { VULNERABLE } ---> VULNERABLE
     INFECTING --- { VULNERABLE } ---> INFECTED   
 
-    Note that if we ignore IMMUNE and UNKNOWN, we have a total order of the form:
+    Note that if we ignore IMMUNE and UNKNOWN, we have a total order of the 
+    form:
         VULNERABLE <= INFECTING <= INFECTED
     """
 
@@ -46,13 +49,18 @@ class InfectionStatus:
             return left
         elif left == InfectionStatus.IMMUNE or right == InfectionStatus.IMMUNE:
             return InfectionStatus.IMMUNE
-        elif left == InfectionStatus.INFECTED or right == InfectionStatus.INFECTED:
+        elif left == InfectionStatus.INFECTED or \
+              right == InfectionStatus.INFECTED:
             return InfectionStatus.INFECTED
-        elif ((left == InfectionStatus.VULNERABLE and right == InfectionStatus.INFECTING) or 
-              (left == InfectionStatus.INFECTING and right == InfectionStatus.VULNERABLE)):
+        elif ((left == InfectionStatus.VULNERABLE and \
+                right == InfectionStatus.INFECTING) or 
+              (left == InfectionStatus.INFECTING and \
+               right == InfectionStatus.VULNERABLE)):
             return InfectionStatus.INFECTED
-        elif left == InfectionStatus.VULNERABLE or right == InfectionStatus.VULNERABLE:
+        elif left == InfectionStatus.VULNERABLE or \
+              right == InfectionStatus.VULNERABLE:
             return InfectionStatus.VULNERABLE
-        elif left == InfectionStatus.UNKNOWN and right == InfectionStatus.UNKNOWN:
+        elif left == InfectionStatus.UNKNOWN and \
+              right == InfectionStatus.UNKNOWN:
             return InfectionStatus.UNKNOWN
         

@@ -15,7 +15,9 @@ class Network:
     """
 
     @classmethod
-    def random_node(cls, source_address=None, with_status=InfectionStatus.UNKNOWN, propagation_delay=0):
+    def random_node(cls, source_address=None, 
+                          with_status=InfectionStatus.UNKNOWN, 
+                          propagation_delay=0):
         """ Select a random node across the full address space """
         return Node(random.randrange(0, cls.address_space), with_status, 
                      [source_address] if not source_address is None else [], 
@@ -34,7 +36,8 @@ class Network:
         optional parameters can be used to control the addresses examined.
         """
         return ifilter(lambda address: cls._sample_vulnerable(), 
-                        xrange(start, (size if not(size is None) else cls.address_space) + start))
+                        xrange(start, (size if not(size is None) \
+                                       else cls.address_space) + start))
 
     @classmethod
     def _sample_vulnerable(cls):
@@ -59,8 +62,8 @@ class NetworkGraphable(Network):
     Create a network of 2^8 nodes, with a default 10% vulnerable probability.
     Both of these values are absurd, but useful for testing.
     """
-    address_space = 2**25
-    probability_vulnerable = 1000000.0 / 2**32
+    address_space = 2**16
+    probability_vulnerable = 1.0/6
 
 class IPv4(Network):
     """

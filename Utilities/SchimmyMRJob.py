@@ -4,6 +4,8 @@ from Utilities.RewindableFile import RewindableFile
 from Utilities.PartitionUtilities import PartitionUtilities
 from Network.Node import TabSeparatedNodeSerializer
 
+class SchimmyException(Exception): pass
+
 class SchimmyMRJob(MRJob):
     """
     Base class for map/reduce jobs that use the Schimmy pattern.
@@ -12,12 +14,12 @@ class SchimmyMRJob(MRJob):
     in the ./partition directory of the form part-0000x, where x is an integer
     in the range (0, #partitions-1).  Subsequent steps will automatically 
     utilize partitions generated from the prior step (which are themselves
-    copied from the HDFS locally).
+    copied from the HDFS to the local file system).
 
     Expects the following definitions in a subclass (in addition to the MRJOB
     mapper and reducer):
 
-        total_partitions: integer yielding the total number of partitions
+        sel.options.partitions: integer yielding the total number of partitions
         partition(key): Given a key, indicates its partition
 
     By default, this class assumes that key "0" is the lowest that will be
@@ -29,21 +31,37 @@ class SchimmyMRJob(MRJob):
     def __init__(self, **kwargs):
         super(SchimmyMRJob, self).__init__(**kwargs)
         self.count = None
-        self.total_partitions = None
+
+        # Wire up our Schimmy interceptors
+        self.mapper_schimmy = self.mapper
+        self.reducer_schimmy = self.reducer
+        self.reducer = self._reducer
+        self.mapper = self._mapper
+        if 'mapper_final' in self.__dict__:
+            self.mapper_final_schimmy = self.mapper_final
+        else:
+            self.mapper_final_schimmy = lambda _: iter([])
+        self.mapper_final = self._mapper_final
+
+        if len(self.args) > 1: 
+            raise SchimmyException('Only one input file may be leveraged with '+
+                                    'Shimmy')
 
     def __del__(self):
-        self.close_partition()
+        if 'options' in self.__dict__:
+            map(self.close_partition, xrange(self.options.partitions))
+
+    def configure_options(self):
+        super(SchimmyMRJob, self).configure_options()
+        self.add_passthrough_option(
+            '--partitions', type='int', 
+            help='Indicate the number of partitions associated with this '+\
+                  'propagation (an equal number of reducers are created).')
 
     ########################################################    
 
     def partition(self, key):
         """ Given a key, indicates its partition """
-        raise NotImplemented
-
-    def mapper_schimmy(self, key, value):
-        raise NotImplemented
-
-    def reducer_schimmy(self, key, values):
         raise NotImplemented
 
     def get_sentinel(self, partition):
@@ -55,8 +73,9 @@ class SchimmyMRJob(MRJob):
 
     @property
     def partition_counts(self):
-        if "_partition_counts" not in self.__dict__ or self._partition_counts is None:
-            self._partition_counts = [0] * self.total_partitions
+        if "_partition_counts" not in self.__dict__ or \
+                self._partition_counts is None:
+            self._partition_counts = [0] * self.options.partitions
         return self._partition_counts
 
     ########################################################
@@ -64,31 +83,37 @@ class SchimmyMRJob(MRJob):
     @property
     def partition_file(self):
         """ Reference to the partition file associated with this reducer """
-        if "_partition_file" not in self.__dict__ or self._partition_file is None:
-            self._partition_file = RewindableFile(open(self.partition_filename), 1024)
+        if "_partition_file" not in self.__dict__ or \
+                self._partition_file is None:
+            self._partition_file = \
+                RewindableFile(open(self.partition_filename), 1024)
         return self._partition_file
-
-    def close_partition(self):
-        """ Closes the partition file associated with this reducer, if open """
-        if "_partition_file" in self.__dict__ and not self._partition_file is None:
-            partition_file, self._partition_file = self._partition_file, None
-            if partition_file != None: partition_file.close()
-            self._partition_filename = None
-            self._partition_counts = None
-            self.current_partition = None
-            self.count = None
 
     @property
     def partition_filename(self):
         """ Gets the partition filename associated with this reducer """
 
-        if "_partition_filename" not in self.__dict__ or self._partition_filename is None:
-            self._partition_filename = PartitionUtilities.get_partition_filename(
-                                self.current_partition, self.total_partitions,
-                                lambda key: self.partition(key), 
-                                lambda line: TabSeparatedNodeSerializer.deserialize(line).address)
+        if "_partition_filename" not in self.__dict__ or \
+                self._partition_filename is None:
+            self._partition_filename = \
+                PartitionUtilities.get_partition_filename(
+                    self.current_partition, self.options.partitions,
+                    lambda key: self.partition(key), 
+                    lambda line: TabSeparatedNodeSerializer.deserialize(line)\
+                                  .address)
         
         return self._partition_filename
+
+    def close_partition(self, partition):
+        """ Closes the partition file associated with this reducer, if open """
+        if "_partition_file" in self.__dict__ and \
+                not self._partition_file is None:
+            partition_file, self._partition_file = self._partition_file, None
+            if partition_file != None: partition_file.close()
+            self._partition_filename = None
+            if '_partition_counts' in self.__dict__: 
+                self._partition_counts[partition] = None
+            self.count = None
 
     ########################################################
 
@@ -110,18 +135,18 @@ class SchimmyMRJob(MRJob):
         
     ########################################################
 
-    def mapper(self, key, value): 
+    def _mapper(self, key, value): 
         # Delegate generation to the underlying mapper
         # And decorate with a partition
         for skey, svalue in self.mapper_schimmy(key, value):
             yield (self._update_partition(skey), skey), svalue
 
-    def mapper_final(self):
+    def _mapper_final(self):
         # Emit all of our partition counts using the special
         # sentinel value (which ensures it is first in the shuffle)
         for partition, count in enumerate(self.partition_counts):
             yield (partition, self.get_sentinel(partition)), count
-        self.close_partition()
+        map(self.close_partition, xrange(self.options.partitions))
 
     def _update_partition(self, key):
         """ Increments the appropriate partition's result count """
@@ -131,7 +156,7 @@ class SchimmyMRJob(MRJob):
 
     ########################################################
 
-    def reducer(self, (partition, key), values):
+    def _reducer(self, (partition, key), values):
         # We expect that the sentinel value will be the first kvp encountered.
         # For that special line, we initialize our reducer.
         if key == self.get_sentinel(partition):
@@ -147,24 +172,19 @@ class SchimmyMRJob(MRJob):
             self.count -= len(values)
 
             # Process the kvp.
-            results, last_key = self.__process(key, values)
-            # We may not have actually output the current kvp above (perhaps 
-            # because the kvp does not exist in the partition file).  This is 
-            # ok, but we still need to emit it if that is the case.
-            if last_key != key:
-                results = chain(results, self.reducer_schimmy(key, values))
+            results = self.__process(key, values)
 
         # When we've encountered all of the kvps that we're expecting, we can
         # blast everything left in the partition file to our output stream.        
         if self.count <= 0:
-            results = chain(results, list(self.__process_to_end()))
-            self.close_partition()
+            results = chain(results, self.__process_to_end())
+            self.close_partition(partition)
 
         return results
 
     def __process_to_end(self):
         """ Blast all remaining kvps in the partition file """
-        return self.__process(None, [])[0]
+        return self.__process(None, [])
 
     def __process(self, target_key, values):
         """
@@ -173,19 +193,22 @@ class SchimmyMRJob(MRJob):
         the target_key, we rewind such that the incorrect key is not consumed.
         """
         key = None
-        results = iter([])
 
         # Iterate across our partition file until we reach target_key
         for (key, value) in self._next_until(target_key):
             # Emit if we haven't reached the target key (or if its null)
             if key <= target_key or target_key is None:
-                results = chain(results, 
-                                self.reducer_schimmy(key, ([value] + values) \
-                                    if key == target_key else [value]))
+                for pair in self.reducer_schimmy(key, ([value] + values) \
+                                    if key == target_key else [value]):
+                    yield pair
 
         # Have we accidently gone too far?  If so, rewind once.
         if key > target_key:
             self._partition_file.rewind()
-
-        return results, key
+        # We may not have actually output the current kvp above (perhaps 
+        # because the kvp does not exist in the partition file).  This is 
+        # ok, but we still need to emit it if that is the case.
+        if target_key != key and not target_key is None:
+            for pair in self.reducer_schimmy(key, values):
+                yield pair
 

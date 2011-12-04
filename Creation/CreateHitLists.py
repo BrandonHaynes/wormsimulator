@@ -23,7 +23,8 @@ class CreateHitLists(MRJob):
 
     def __init__(self, **kwargs):
         mrjob.util.log_to_stream(level=mrjob.util.logging.ERROR)
-        kwargs['args'] = ['--input-protocol', 'repr'] + list(kwargs.get('args', []))
+        kwargs['args'] = ['--input-protocol', 'repr'] + \
+                         list(kwargs.get('args', []))
 
         super(CreateHitLists, self).__init__(**kwargs)
         self.infected_nodes = []
@@ -32,7 +33,8 @@ class CreateHitLists(MRJob):
     def configure_options(self):
         super(CreateHitLists, self).configure_options()
         self.add_passthrough_option(
-            '--size', type='int', default=1, help='Indicate the desired hit-list size of for vulnerable nodes.')
+            '--size', type='int', default=1, help='Indicate the desired \
+                                       hit-list size of for vulnerable nodes.')
 
     def mapper(self, key, value):
         # If the node is infected, save it for emission during mapper_final
@@ -47,13 +49,16 @@ class CreateHitLists(MRJob):
             yield key, value
        
     def mapper_final(self):
-        # Here we handle infected nodes (which were not emitted during the mapper)
-        # For each such node, create a hit list, attach it, and then emit the result.
+        # Here we handle infected nodes (which were not emitted during the 
+        # mapper)
+        # For each such node, create a hit list, attach it, and then emit 
+        # the result.
         for infected_node in self.infected_nodes:
             infected_node.hit_list = \
                 map(lambda n: n.address, 
                     random.sample(self.vulnerable_nodes, 
-                                  min(self.options.size, len(self.vulnerable_nodes))))
+                                  min(self.options.size, 
+                                      len(self.vulnerable_nodes))))
             yield Node.serializer.serialize(infected_node)
 
     def reducer(self, key, values):
