@@ -1,0 +1,192 @@
+========================================================================
+Internet Worm Propagation Simulation
+Brandon Haynes & Charles Li (2011)
+wormsimulator.info
+========================================================================
+
+This file documents the use of the simulation software, including network 
+creation, propagation, and visualization.
+
+------------------------------------------------------------------------
+Source Code
+------------------------------------------------------------------------
+
+Source code is available in the project repository, located at 
+http://code.google.com/p/wormsimulator.
+
+------------------------------------------------------------------------
+Quick Start
+------------------------------------------------------------------------
+
+Create a new IPv4 network:
+
+> python Create.py network.0 Network256 10 1
+
+Propagate the worm forward in time:
+
+> python Propagate.py --network Network256 --emit-volatile 1 network.0 > network.1
+> python Propagate.py --network Network256 --emit-volatile 1 network.1 > network.2
+> python Propagate.py --network Network256 --emit-volatile 1 network.2 > network.3
+
+Visualize the results:
+
+> python Visualize.py Network256 network.3
+
+------------------------------------------------------------------------
+General Usage
+------------------------------------------------------------------------
+
+--- Creating a Network ---
+
+The script Create.py is used to create an initial network, identify a set 
+of vulnerable nodes, and mark one (or more) of those nodes as initially 
+infected.  This script is invoked as:
+
+> python Create.py output_filename network_class [number infected] 
+                   [hit-list size]
+
+Here network_class is one of the set:
+    Network256, 
+    NetworkGraphable, 
+    IPv4, or
+    IPv6 
+
+The number infected parameter allows a user to identify the number of 
+initially-infected hosts (a network with zero infected nodes is not 
+particularly interesting); by default one node is marked as infected.  
+Similarly, infected nodes may be pre-loaded with one or more known-
+vulnerable hosts to speed propagation via the hit-list size parameter.
+
+By way of example, the following command creates a new IPv4 network 
+with a single initially-infected machine and saves the result to a 
+file named my-network:
+
+> python Create.py my-network IPv4
+
+--- Infection Propagation ---
+
+Two propagation methods are supported, a direct, brute-force method 
+and an alternative that utilizes a variant of the Schimmy pattern.  
+The differences between these two methods are discussed in more detail 
+under Program Design.
+
+- Direct Propagation -
+
+The script Propagate.py accepts a previously-created network and 
+simulates infection propagation by one or more iterations.  This script 
+is invoked as:
+
+> python Propagate.py --network network_type [--iterations #iterations] 
+                      [--propagation-delay delay] [--emit-volatile flag] 
+                      [additional flags] input-network
+
+Here network_class is one of the set { Network256, NetworkGraphable, 
+IPv4, and IPv6 }.  These classes are discussed in more detail under 
+Program Design.
+
+Multiple iterations may be chained together during one execution via 
+the iterations flag; by default the network is moved forward by one 
+cycle.  Note that intermediate network states are not emitted when 
+multiple iterations are specified; accordingly for some types of 
+analyses it may be optimal to loop over single iterations via a local 
+script.
+
+Network propagation may be modeled with a delay factor; this factor is 
+applied to both the attacking and newly-infected node, and represents a 
+transfer delay of the infection payload.  For example, a propagation 
+delay of 10 iterations will lock both sides of a successful attack for 
+ten iterations.  Infected nodes that are unsuccessful in locating a 
+vulnerable node are not locked (in this case no payload would be 
+transferred).
+
+The emit-volatile flag causes some intermediate key-value pairs to be 
+output during each iteration.  This is useful both for debugging and 
+visualization purposes.  Specifically, this flag emits infection 
+attempts (whether successful or not) that took place during the most 
+recent iteration.
+
+Since the direct propagation script relies upon MRJob to effectuate 
+mapping and reduction, most flags exposed by MRJob are also usable via 
+the direct propagation script.  For example, including the switch 
+-r emr allows propagation to be performed on the Amazon EMR platform.
+
+To illustrate these options, consider the following script which models 
+propagation for one cycle assuming an IPv4 universe:
+
+> python Propagate.py --network IPv4 my-network
+
+By contrast, the following command executes the same propagation on the 
+Amazon EMR platform:
+
+python Propagate.py -r emr --network IPv4 my-network
+By default, propagation results are emitted to standard output.  For 
+many purposes, it may be useful to redirect this to a file:
+
+> python Propagate.py -r emr --network IPv4 my-network > my-network-prime
+
+- Schimmy Propagation -
+
+The script SchimmyPropagate.py is largely similar to the Propagate.py 
+script discussed above, with the exception that it uses the Schimmy 
+pattern to reduce the cost of intermediate shuffling for large data sets.
+
+This script is invoked as:
+
+> python SchimmyPropagate.py --network network_type 
+                             --partitions #partitions 
+                             [--iterations #iterations] 
+                             [--propagation-delay delay] 
+                             [--emit-volatile flag] 
+                             [additional flags] input-network
+
+Here network_type, iterations, propagation-delay, emit-volatile, and 
+input-filename function identically to the Propagate.py script 
+discussed above.
+
+The partitions flag is a required switch that indicates the number of 
+partitions that are used during Schimmy processing.  During 
+initialization, the input file is decomposed into this number of 
+partitions, and each is associated with a specific reducer.
+
+Note that the Schimmy pattern requires a specifically-constructed 
+partitioner and key split, and as such is only available on the Amazon 
+EMR platform.  The proper MRJob switches are automatically specified 
+for this purpose.  Additionally, Hadoop version 2.0 is automatically 
+selected on the EMR platform.
+
+As above, most other flags that are available via the MRJob system 
+may be used with Schimmy propagation.
+
+By way of example, the following command line models propagation for 
+one cycle using the Schimmy pattern assuming an IPv4 network and 8 
+partitions:
+
+> python SchimmyPropagate.py --network IPv4 --partitions 8 my-network
+
+--- Visualization ---
+
+The script Visualize.py generates a plot of the network as a grid. It 
+accepts a previously created network and plots the nodes. If volatile 
+edges were emitted during propagation, the script will plot the 
+successful infections as directed edges from the attacker to the newly-
+infected host. The NetworkX Python graph-plotting library is required.
+
+The script is invoked as:
+
+> python Visualize.py network_type input_graph 
+                      [output_plot.png 'Title of Plot']
+
+For this script, network_type corresponds to only Network256 and 
+NetworkGraphable (IPv4 and IPv6 are too large to visualize).
+
+For Network256, all nodes are plotted (immune, vulnerable, and 
+infected). For NetworkGraphable, due to the large size of the entire 
+graph, only vulnerable and infected nodes are drawn. Within the script 
+itself, two adjustable parameters exist: nodePlotSize adjusts the size 
+of each node, and plotSideLength adjusts the length of the sides of the 
+generated image.
+
+We have the following example of usage with nodePlotSize = 15 and 
+plotSideLength = 12:
+
+> python Visualize.py NetworkGraphable input_graph output_plot.png 'Usage
